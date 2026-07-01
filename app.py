@@ -385,7 +385,7 @@ def venue_map_lookup(v):
 
 def build_database():
     m = pd.read_csv("matches.csv")
-    d = pd.read_csv("deliveries.csv")
+    d = pd.read_csv("deliveries.csv.gz", compression="gzip")
 
     m["date"]  = pd.to_datetime(m["date"], dayfirst=True)
     m["month"] = m["date"].dt.month
