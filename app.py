@@ -385,7 +385,7 @@ def venue_map_lookup(v):
 
 def build_database():
     m = pd.read_csv("matches.csv")
-    d = pd.read_csv("deliveries.csv.gz", compression="gzip")
+    d = pd.read_csv("deliveries.csv")
 
     m["date"]  = pd.to_datetime(m["date"], dayfirst=True)
     m["month"] = m["date"].dt.month
@@ -725,17 +725,34 @@ with tab3:
         pdf = d[d["batter"] == player_name].merge(
             m[["id", "date", "season"]], left_on="match_id", right_on="id"
         )
-        rpm = pdf.groupby(["match_id", "date"])["batsman_runs"].sum().reset_index().sort_values("date")
+        runs_agg = pdf.groupby(["match_id", "date"])["batsman_runs"].sum().reset_index()
+        dismissed_agg = (
+            d[d["player_dismissed"] == player_name]
+            .groupby("match_id")["player_dismissed"]
+            .count()
+            .reset_index()
+            .rename(columns={"player_dismissed": "dismissed"})
+        )
+        rpm = runs_agg.merge(dismissed_agg, on="match_id", how="left")
+        rpm["dismissed"] = rpm["dismissed"].fillna(0).astype(int)
+        rpm = rpm.sort_values("date")
         rpm["rolling_avg"] = rpm["batsman_runs"].rolling(5, min_periods=1).mean().round(1)
         rpm["date"] = pd.to_datetime(rpm["date"])
         return rpm
+
+    def cricket_avg(rpm):
+        total_runs = rpm["batsman_runs"].sum()
+        total_outs = rpm["dismissed"].sum()
+        if total_outs == 0:
+            return round(float(total_runs), 1)
+        return round(float(total_runs / total_outs), 1)
 
     mode = st.radio("View mode", ["Single player", "Compare two players"], horizontal=True)
 
     if mode == "Single player":
         player  = st.selectbox("Select batter", all_batters)
         runs_pm = get_player_runs(player)
-        career_avg = round(float(runs_pm["batsman_runs"].mean()), 1)
+        career_avg = cricket_avg(runs_pm)
 
         fig2 = go.Figure()
         fig2.add_trace(go.Bar(
@@ -794,8 +811,8 @@ with tab3:
 
         runs_a = get_player_runs(player_a)
         runs_b = get_player_runs(player_b)
-        avg_a  = round(float(runs_a["batsman_runs"].mean()), 1)
-        avg_b  = round(float(runs_b["batsman_runs"].mean()), 1)
+        avg_a  = cricket_avg(runs_a)
+        avg_b  = cricket_avg(runs_b)
 
         fig_cmp = go.Figure()
         fig_cmp.add_trace(go.Scatter(
